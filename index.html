@@ -257,10 +257,25 @@
     </div>
 
     <script>
-        // 配置信息
+        // 修改前
         const BACKEND_BASE_URL = 'http://localhost:5000';
         const BACKEND_API_URL = `${BACKEND_BASE_URL}/api`;
         const WEBHOOK_URL = 'https://webhook.site/f79bd1d7-d7e7-4b63-90b7-15e594d803e4';
+        
+        // 修改后
+        const BACKEND_BASE_URL = ''; // 留空或设置为实际后端服务器地址
+        const BACKEND_API_URL = BACKEND_BASE_URL ? `${BACKEND_BASE_URL}/api` : '';
+        const WEBHOOK_URL = 'https://webhook.site/f79bd1d7-d7e7-4b63-90b7-15e594d803e4';
+        
+        // 添加智能检测逻辑
+        function isLocalhost() {
+            return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        }
+        
+        // 如果是本地访问，使用localhost后端；否则跳过后端直接使用Webhook
+        if (isLocalhost() && !BACKEND_API_URL) {
+            const BACKEND_API_URL = 'http://localhost:5000/api';
+        }
         
         // CORS代理列表（备用）
         const CORS_PROXIES = [
@@ -543,6 +558,7 @@
                 
                 console.log('准备提交的数据:', record);
                 
+                // 修改前的表单提交逻辑
                 try {
                     // 优先使用后端直接接口
                     const response = await sendToBackend(record);
@@ -575,6 +591,39 @@
                             updateDateTime();
                         } else {
                             showMessage('保存失败，请重试', 'warning');
+                        }
+                    }
+                }
+                
+                // 修改后的表单提交逻辑
+                async function submitRegistration(record) {
+                    // 判断是否为本地环境
+                    const isLocalEnv = isLocalhost();
+                    
+                    // 本地环境：尝试后端→Webhook→本地存储
+                    if (isLocalEnv && BACKEND_API_URL) {
+                        try {
+                            await sendToBackend(record);
+                            showMessage('登记成功！数据已保存到服务器', 'success');
+                            return true;
+                        } catch (error) {
+                            console.log('本地后端失败，尝试Webhook');
+                        }
+                    }
+                    
+                    // 非本地环境或本地后端失败：直接尝试Webhook→本地存储
+                    try {
+                        await sendToWebhook(record);
+                        showMessage('登记成功！数据已通过Webhook发送', 'success');
+                        return true;
+                    } catch (webhookError) {
+                        // Webhook也失败，保存到本地存储
+                        if (saveToLocalStorage(record)) {
+                            showMessage('网络连接失败，数据已保存到本地', 'info');
+                            return true;
+                        } else {
+                            showMessage('保存失败，请重试', 'warning');
+                            return false;
                         }
                     }
                 }
